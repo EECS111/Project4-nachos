@@ -39,8 +39,8 @@ public class UserProcess {
 		this.pid = UserKernel.getNextPid();
 		UserProcess currProcess = UserKernel.currentProcess();
 		
-		// adding root process to the ProcessList
-		ProcessList.add(currProcess);
+		// adding root process to the UserProcessList
+		UserProcessList.add(currProcess);
 		
 		for (int i = 0; i < numPhysPages; i++)
 			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
@@ -366,7 +366,7 @@ public class UserProcess {
 		// if the process is root, halt the machine, else, finish the thread        
 		if (this.pid == 1)           // 1) if the process is root process
 			Machine.halt();
-		else if (ProcessList.isEmpty())   // 2) if the number of processes is 0;
+		else if (UserProcessList.isEmpty())   // 2) if the number of processes is 0;
 			Kernel.kernel.terminate();
 		else
 			UThread.finish();
@@ -733,6 +733,6 @@ public class UserProcess {
 	private int Ppid = 0;
 	
 	// list of processes
-	private LinkedList<UserProcess> ProcessList = new LinkedList<UserProcess>();
+	private LinkedList<UserProcess> UserProcessList = new LinkedList<UserProcess>();
 	
 }
