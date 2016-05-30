@@ -445,32 +445,32 @@ public class UserProcess {
 	private int handleRead(int FDPosInArray, int bufferAddr, int bufferSize) {
 			
 		// check if file Descriptor is valid
-		if(FDPosInArray < 0 || FDPosInArray > MAXFileDescriptor) { 
+		if(FDPosInArray < 0 || FDPosInArray > MAXFileDescriptor || FDPosInArray == 1) { 
 			return -1;
 		}
-		
+				
 		if (fileDescriptorArray[FDPosInArray].fileObject == null) {
 			return -1;
 		}
-		
+				
 		byte[] buffer = new byte[bufferSize];
-		
+				
 		int tmpFilePos = fileDescriptorArray[FDPosInArray].filePosition;
-		
+				
 		// read
 		int numOfBytesRead = fileDescriptorArray[FDPosInArray].fileObject.read(tmpFilePos, buffer, 0, bufferSize);
-		
+				
 		// check the return of read is not -1
 		if(numOfBytesRead == -1) {
 			return -1;
 		}
-		
+				
 		// if read successfully, update the file position and return number of bytes read
 		else {
-			
+					
 			int retAmount = writeVirtualMemory(bufferAddr, buffer);
 			fileDescriptorArray[FDPosInArray].filePosition = tmpFilePos + retAmount;
-			
+					
 			return numOfBytesRead;
 		}
 	}
@@ -479,35 +479,28 @@ public class UserProcess {
 	private int handleWrite(int FDPosInArray, int bufferAddr, int bufferSize) {
 		
 		// check if file Descriptor is valid
-		if(FDPosInArray < 0 || FDPosInArray > MAXFileDescriptor) { 
+		if(FDPosInArray < 0 || FDPosInArray > MAXFileDescriptor || FDPosInArray == 0) { 
 			return -1;
 		}
-				
+						
 		if (fileDescriptorArray[FDPosInArray].fileObject == null) {
 			return -1;
 		}
-				
-		byte[] buffer = new byte[bufferSize];
 		
-		int tmpFilePos = fileDescriptorArray[FDPosInArray].filePosition;
+		
+		byte[] buffer = new byte[bufferSize];
 		
 		// reading from virtual memory
 		int numOfBytesRead = readVirtualMemory(bufferAddr, buffer);
 		
-		// write
-		int numOfBytesWrite = fileDescriptorArray[FDPosInArray].fileObject.write(tmpFilePos, buffer, 0, numOfBytesRead);
 		
-		// check the return of write is not -1
-		if(numOfBytesWrite == -1) {
+		Lib.assertTrue(fileDescriptorArray[FDPosInArray].fileObject.write(buffer, 0, numOfBytesRead) == numOfBytesRead);
+		if(numOfBytesRead < 0 || numOfBytesRead < bufferSize)
+		{
+			
 			return -1;
 		}
-		
-		// if write successfully, update the file position and return number of bytes written
-		else {
-			fileDescriptorArray[FDPosInArray].filePosition = tmpFilePos + numOfBytesWrite;
-			
-			return numOfBytesWrite;
-		}
+		return numOfBytesRead+1;
 	}
 	
 	// Close
