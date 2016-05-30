@@ -5,6 +5,7 @@ import nachos.threads.*;
 import nachos.userprog.*;
 
 import java.io.EOFException;
+import java.util.LinkedList;
 
 /**
  * Encapsulates the state of a user process that is not contained in its user
@@ -33,6 +34,13 @@ public class UserProcess {
 		
 		fileDescriptorArray[0].fileObject = UserKernel.console.openForReading();
 		fileDescriptorArray[1].fileObject = UserKernel.console.openForWriting();	
+		
+		// getting next Pid which will get pid = 1, indicating root process
+		this.pid = UserKernel.getNextPid();
+		UserProcess currProcess = UserKernel.currentProcess();
+		
+		// adding root process to the ProcessList
+		ProcessList.add(currProcess);
 		
 		for (int i = 0; i < numPhysPages; i++)
 			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
@@ -351,7 +359,21 @@ public class UserProcess {
 		Lib.assertNotReached("Machine.halt() did not halt machine!");
 		return 0;
 	}
-
+	
+	// Exit
+	private int handleExit(int a0) {
+				
+		// if the process is root, halt the machine, else, finish the thread        
+		if (this.pid == 1)           // 1) if the process is root process
+			Machine.halt();
+		else if (ProcessList.isEmpty())   // 2) if the number of processes is 0;
+			Kernel.kernel.terminate();
+		else
+			UThread.finish();
+	
+		return 0;
+	}
+	
 	// Create
 	private int handleCreate(int a0) {
 		
@@ -598,6 +620,8 @@ public class UserProcess {
 		switch (syscall) {
 		case syscallHalt:
 			return handleHalt();
+		case syscallExit:
+			return handleExit(a0);
 		case syscallCreate:
 			return handleCreate(a0);
 		case syscallOpen:
@@ -701,5 +725,14 @@ public class UserProcess {
 	
 	// file descriptor array
 	private FileDescriptor[] fileDescriptorArray = new FileDescriptor[MAXFileDescriptor];
-
+	
+	// Pid
+	private int pid = 0;
+	
+	// parent pid
+	private int Ppid = 0;
+	
+	// list of processes
+	private LinkedList<UserProcess> ProcessList = new LinkedList<UserProcess>();
+	
 }

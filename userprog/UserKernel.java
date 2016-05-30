@@ -61,6 +61,15 @@ public class UserKernel extends ThreadedKernel {
 
 		return ((UThread) KThread.currentThread()).process;
 	}
+	
+	
+	// get next Pid
+	public static int getNextPid() {
+		Machine.interrupt().disable();
+		nextPid++;
+		Machine.interrupt().enable();
+		return nextPid;
+	}
 
 	/**
 	 * The exception handler. This handler is called by the processor whenever a
@@ -113,4 +122,8 @@ public class UserKernel extends ThreadedKernel {
 
 	// dummy variables to make javac smarter
 	private static Coff dummy1 = null;
+	
+	// keep track of next Pid
+	private static int nextPid = 0;
+	
 }
