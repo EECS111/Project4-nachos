@@ -26,19 +26,13 @@ public class UserProcess {
 	public UserProcess() {
 		int numPhysPages = Machine.processor().getNumPhysPages();
 		pageTable = new TranslationEntry[numPhysPages];
-		
-		// initializing the array with FD
-		for(int i = 0; i < MAXFileDescriptor; i++) {
-			fileDescriptorArray[i] = new FileDescriptor();
-		}
-		
-		fileDescriptorArray[0].fileObject = UserKernel.console.openForReading();
-		fileDescriptorArray[1].fileObject = UserKernel.console.openForWriting();	
+		fileDescriptors[0] = UserKernel.console.openForReading();
+		fileDescriptors[1] = UserKernel.console.openForWriting();	
 		
 		// getting next Pid which will get pid = 1, indicating root process
 		this.pid = UserKernel.getNextPid();
 		UserProcess currProcess = UserKernel.currentProcess();
-		
+				
 		// adding root process to the UserProcessList
 		UserProcessList.add(currProcess);
 		
@@ -359,10 +353,9 @@ public class UserProcess {
 		Lib.assertNotReached("Machine.halt() did not halt machine!");
 		return 0;
 	}
-	
-	// Exit
-	private int handleExit(int a0) {
-				
+
+	private int handleExit()
+	{
 		// if the process is root, halt the machine, else, finish the thread        
 		if (this.pid == 1)           // 1) if the process is root process
 			Machine.halt();
@@ -370,179 +363,154 @@ public class UserProcess {
 			Kernel.kernel.terminate();
 		else
 			UThread.finish();
-	
+			
 		return 0;
+	} 
+	
+	private int findFirstFreeFileDescriptor(){
+		for(int i = 2; i < MAXOPEN; i++){
+			if(fileDescriptors[i] == null){
+				return i;
+			}			
+		}
+		return -1;
 	}
-	
-	// Create
-	private int handleCreate(int a0) {
+	private int handleCreate(int a0){
+		String f_name = readVirtualMemoryString(a0,256);
 		
-		// get file name. 256 is the max length
-		String tmpFileName = readVirtualMemoryString(a0, 256);
-		
-		if(tmpFileName == null) {
+		if(f_name == null){
 			return -1;
 		}
 		
-		// find a free file descriptor
-		int freeFDPos = findFreeFileDescriptor();
-	
-		if(freeFDPos == -1) {
+		//check if argument is greater than 256
+		if(f_name.length() > 256){ 
 			return -1;
 		}
 		
-		// get the file object and store it in the fileDecriptorArray
-		else {
+		int avail_file_descriptor = findFirstFreeFileDescriptor();
+		
+		if(avail_file_descriptor == -1){
+			return -1;
+		}
+		else{
+			OpenFile o_f = UserKernel.fileSystem.open(f_name, true);
 			
-			// call open with creation=true
-			OpenFile tmpFileObject = UserKernel.fileSystem.open(tmpFileName, true);
-			
-			if(tmpFileObject == null) {
+			if(o_f == null){
 				return -1;
 			}
 			
-			fileDescriptorArray[freeFDPos].fileObject = tmpFileObject;
-			
-			return freeFDPos;
+			fileDescriptors[avail_file_descriptor] = o_f;
+			return avail_file_descriptor;
 		}
-		
 	}
-	
-	// Open. Almost the same for handlCreate put is not creating a new file
-	private int handleOpen(int a0) {
+	 
+	 private int handleOpen(int a0){
+		String f_name = readVirtualMemoryString(a0,256);
 		
-		// get file name. 256 is the max length
-		String tmpFileName = readVirtualMemoryString(a0, 256);
-				
-		if(tmpFileName == null) {
+		if(f_name == null){
 			return -1;
 		}
-				
-		// find a free file descriptor
-		int freeFDPos = findFreeFileDescriptor();
+		
+		//check if argument is greater than 256
+		if(f_name.length() > 256){
+			return -1;
+		}
+		
+		int avail_file_descriptor = findFirstFreeFileDescriptor();
+		
+		if(avail_file_descriptor == -1){
+			return -1;
+		}
+		else{
+			OpenFile o_f = UserKernel.fileSystem.open(f_name, false);
 			
-		if(freeFDPos == -1) {
-			return -1;
-		}
-				
-		// get the file object and store it in the fileDecriptorArray
-		else {
-					
-			// call open with creation=false
-			OpenFile tmpFileObject = UserKernel.fileSystem.open(tmpFileName, false);
-					
-			if(tmpFileObject == null) {
+			if(o_f == null){
 				return -1;
 			}
-						
-			fileDescriptorArray[freeFDPos].fileObject = tmpFileObject;
-						
-			return freeFDPos;
-		}
-	}
-	
-	// Read
-	private int handleRead(int FDPosInArray, int bufferAddr, int bufferSize) {
 			
-		// check if file Descriptor is valid
-		if(FDPosInArray < 0 || FDPosInArray > MAXFileDescriptor || FDPosInArray == 1) { 
-			return -1;
-		}
-				
-		if (fileDescriptorArray[FDPosInArray].fileObject == null) {
-			return -1;
-		}
-				
-		byte[] buffer = new byte[bufferSize];
-				
-		int tmpFilePos = fileDescriptorArray[FDPosInArray].filePosition;
-				
-		// read
-		int numOfBytesRead = fileDescriptorArray[FDPosInArray].fileObject.read(tmpFilePos, buffer, 0, bufferSize);
-				
-		// check the return of read is not -1
-		if(numOfBytesRead == -1) {
-			return -1;
-		}
-				
-		// if read successfully, update the file position and return number of bytes read
-		else {
-					
-			int retAmount = writeVirtualMemory(bufferAddr, buffer);
-			fileDescriptorArray[FDPosInArray].filePosition = tmpFilePos + retAmount;
-					
-			return numOfBytesRead;
+			fileDescriptors[avail_file_descriptor] = o_f;
+			return avail_file_descriptor;
 		}
 	}
-	
-	// Write
-	private int handleWrite(int FDPosInArray, int bufferAddr, int bufferSize) {
-		
-		// check if file Descriptor is valid
-		if(FDPosInArray < 0 || FDPosInArray > MAXFileDescriptor || FDPosInArray == 0) { 
-			return -1;
-		}
-						
-		if (fileDescriptorArray[FDPosInArray].fileObject == null) {
-			return -1;
-		}
-		
-		
-		byte[] buffer = new byte[bufferSize];
-		
-		// reading from virtual memory
-		int numOfBytesRead = readVirtualMemory(bufferAddr, buffer);
-		
-		
-		Lib.assertTrue(fileDescriptorArray[FDPosInArray].fileObject.write(buffer, 0, numOfBytesRead) == numOfBytesRead);
-		if(numOfBytesRead < 0 || numOfBytesRead < bufferSize)
+
+	/** Handle the read() system call */
+	private int handleRead(int fd, int bufferAddr, int count)
+	{
+		int nBytes = -1;
+		if(fd < 0 || count < 0 || fd == 1)
 		{
-			
 			return -1;
 		}
-		return numOfBytesRead+1;
+		OpenFile of = fileDescriptors[fd];
+		if(of == null)
+		{
+			return -1;
+		}
+		byte[] data = new byte[count];
+		nBytes = of.read(data, 0, data.length);
+		
+		Lib.assertTrue(writeVirtualMemory(bufferAddr, data, 0, nBytes) == nBytes);
+				
+		if(nBytes < 0)
+		{
+			return -1;
+		}
+		return nBytes;
+		
 	}
 	
-	// Close
-	private int handleClose(int FDPosInArray) {
+	private int handleWrite(int fd, int bufferAddr, int count)
+	{
 		
-		// check if valid File descriptor 
-		if (FDPosInArray < 0 || FDPosInArray > MAXFileDescriptor) {
+		int nBytes = 0;
+		if(fd < 0 || count < 0 || fd == 0)
+		{
+			return -1;
+		}
+		OpenFile of = fileDescriptors[fd];
+		if(of == null)
+		{
 			return -1;
 		}
 		
-		if (fileDescriptorArray[FDPosInArray].fileObject == null) {
+		byte[] data = new byte[count];
+		nBytes = readVirtualMemory(bufferAddr, data, 0, data.length);
+		
+		Lib.assertTrue(of.write(data, 0, nBytes) == nBytes);
+		if(nBytes < 0 || nBytes < count)
+		{
+			return -1;
+		}
+		return nBytes+1;
+	}
+	
+	private int handleClose(int fd) {
+		if(fd < 0 || fd >=  MAXOPEN) {
 			return -1;
 		}
 		
-		// close the file
-		fileDescriptorArray[FDPosInArray].fileObject.close();
+		if(fileDescriptors[fd] == null) {
+			return -1;
+		}
 		
-		// the position in the array that the previously file was, make that position available again
-		fileDescriptorArray[FDPosInArray].fileObject = null;
-		fileDescriptorArray[FDPosInArray].filePosition = 0;
+		fileDescriptors[fd].close();
+		fileDescriptors[fd] = null;
 		
 		return 0;
-	
 	}
 	
-	// Unlink
-	private int handleUnlink (int a0) {
+	private int handleUnlink(int a0) {
+		String f_name = readVirtualMemoryString(a0,256);
 		
-		// get the file name, 256 is the max length
-		String tmpFileName = readVirtualMemoryString(a0, 256);
-		
-		if(tmpFileName == null) {
+		if(f_name == null){
 			return -1;
 		}
 		
-		// remove the file 
-		UserKernel.fileSystem.remove(tmpFileName);
-		
+		UserKernel.fileSystem.remove(f_name);
 		return 0;
+
 	}
-	
-	
+
 	private static final int syscallHalt = 0, syscallExit = 1, syscallExec = 2,
 			syscallJoin = 3, syscallCreate = 4, syscallOpen = 5,
 			syscallRead = 6, syscallWrite = 7, syscallClose = 8,
@@ -609,16 +577,18 @@ public class UserProcess {
 	 * @param a3 the fourth syscall argument.
 	 * @return the value to be returned to the user.
 	 */
+	 
+
 	public int handleSyscall(int syscall, int a0, int a1, int a2, int a3) {
 		switch (syscall) {
 		case syscallHalt:
 			return handleHalt();
 		case syscallExit:
-			return handleExit(a0);
-		case syscallCreate:
-			return handleCreate(a0);
+			return handleExit();
 		case syscallOpen:
 			return handleOpen(a0);
+		case syscallCreate:
+			return handleCreate(a0);
 		case syscallRead:
 			return handleRead(a0, a1, a2);
 		case syscallWrite:
@@ -627,7 +597,6 @@ public class UserProcess {
 			return handleClose(a0);
 		case syscallUnlink:
 			return handleUnlink(a0);
-
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
 			Lib.assertNotReached("Unknown system call!");
@@ -663,35 +632,8 @@ public class UserProcess {
 		}
 	}
 	
-	
-	// creating a class for FileDescriptor 
-	private class FileDescriptor {
-		
-		// fields
-		private OpenFile fileObject;
-		private int filePosition;
-		
-		// initialize fields
-		private FileDescriptor() {
-			this.fileObject = null;
-			this.filePosition = 0;
-		}
-	}
-	
-	// find the first free file descriptor in the array
-	private int findFreeFileDescriptor() {
-		
-		for(int i = 0; i < MAXFileDescriptor; i++) {
-			
-			// null indicates that it hasn't been used yet
-			if(fileDescriptorArray[i] == null) {
-				return i;
-			}
-		}
-		
-		// if no file descriptor is free, return -1
-		return -1;
-	}
+	protected final int MAXOPEN = 16;
+
 
 	/** The program being run by this process. */
 	protected Coff coff;
@@ -712,20 +654,16 @@ public class UserProcess {
 	private static final int pageSize = Processor.pageSize;
 
 	private static final char dbgProcess = 'a';
-	
-	// maximum file descriptor a process can have
-	private static final char MAXFileDescriptor = 16;
-	
-	// file descriptor array
-	private FileDescriptor[] fileDescriptorArray = new FileDescriptor[MAXFileDescriptor];
+    
+	protected OpenFile[] fileDescriptors = new OpenFile[MAXOPEN];
 	
 	// Pid
 	private int pid = 0;
-	
+		
 	// parent pid
 	private int Ppid = 0;
-	
+		
 	// list of processes
 	private LinkedList<UserProcess> UserProcessList = new LinkedList<UserProcess>();
-	
+
 }
